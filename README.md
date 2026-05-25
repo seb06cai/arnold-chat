@@ -6,69 +6,53 @@
 
 ---
 
-## How It Works (End-to-End)
+## How it works
 
-1. The user opens the frontend and clicks **BEGIN SESSION**.
-2. The Next.js frontend calls `POST /api/token`, which generates a signed LiveKit JWT and configures the room to dispatch the `arnold-coach` agent worker.
-3. The browser connects to LiveKit Cloud via the LiveKit JS SDK.
-4. LiveKit Cloud dispatches the room job to the Python agent worker running on AWS EC2.
-5. The agent greets the user with Arnold's opening line, then listens and responds in real time using a full voice pipeline: Deepgram STT → GPT-4.1-mini LLM → ElevenLabs TTS, with Silero VAD for turn detection.
-6. On each substantive user turn, the agent runs hybrid RAG retrieval over Arnold's *Encyclopedia of Modern Bodybuilding* and injects the most relevant passages as context before the LLM generates a response.
-7. The frontend displays a live transcript, with Arnold's lines styled in gold on the left and the user's lines in gray on the right.
+Click **BEGIN SESSION** and you're talking to Arnold Schwarzenegger, circa Gold's Gym Venice Beach 1977.
+
+Under the hood: the frontend hits `/api/token` to get a LiveKit JWT, connects to LiveKit Cloud, and LiveKit dispatches the session to a Python agent running on EC2. From there it's a full voice pipeline — Deepgram transcribes what you say, GPT-4.1-mini figures out what Arnold should say back, and ElevenLabs speaks it. Silero handles turn detection so Arnold knows when you've finished talking.
+
+On every substantive turn, the agent runs RAG over Arnold's *Encyclopedia of Modern Bodybuilding* and injects the most relevant passages into context before the LLM responds. The transcript shows Arnold's lines in gold on the left, yours in gray on the right.
 
 ---
 
-## RAG Integration
+## RAG
 
-**Source:** Arnold Schwarzenegger's *Encyclopedia of Modern Bodybuilding* (~1,100 chunks after OCR and splitting).
+The source is Arnold's *Encyclopedia of Modern Bodybuilding* — the PDF is image-based, so it had to be OCR'd first (`pdf2image` + `pytesseract`). From there, the text gets split into ~512-token chunks, embedded with `text-embedding-3-small`, and stored in a FAISS index. The same chunks are kept as plain text for BM25.
 
-**Indexing (`agent/ingest.py`):**
-- OCR via `pdf2image` + `pytesseract` (the PDF is image-based, not text-based)
-- Text split into ~512-token chunks with 50-token overlap via `llama-index`
-- Embedded with `text-embedding-3-small` and stored in a FAISS index
-- The same chunks are stored as plain text in `nodes.json` for BM25
+At query time, retrieval is hybrid — FAISS top-4 for semantic matches, BM25 top-3 for keyword matches, deduplicated down to ≤5 passages. Short responses like "yes" or "ok" skip retrieval entirely to avoid unnecessary latency. When the `get_exercise_form_cues` tool is called, the query is sharpened to `"{exercise} technique execution form"` for more targeted results.
 
-**Retrieval (`agent/rag.py`):**
-- Hybrid: FAISS top-4 (semantic) + BM25 top-3 (keyword), deduplicated to ≤5 passages
-- Triggered on every user turn with >6 words or containing `?`; short utterances skip retrieval to reduce latency
-- For the `get_exercise_form_cues` tool call, retrieval is run with a focused query (`"{exercise} technique execution form"`) to ensure precise cue lookup
-
-**Injection:** Retrieved passages are injected as an assistant-role context message before the LLM generates its response. The injection includes a reminder to still call tools for exercise form and motivation questions, so RAG context does not suppress tool calls.
-
-**Index storage:** The pre-built `agent/storage/` directory is committed to the repo. The agent loads the index at startup and never re-indexes at runtime.
+Retrieved passages get injected as context before the LLM generates its response. The pre-built index lives in `agent/storage/` and is committed to the repo — the agent loads it at startup and never rebuilds it.
 
 ---
 
 ## Tools
 
-| Tool | When called | What it does |
+| Tool | Triggered by | What it does |
 |------|-------------|--------------|
-| `get_exercise_form_cues` | Any exercise form or technique question | Runs targeted RAG retrieval and returns cues from the Encyclopedia |
-| `generate_workout_plan` | Training plan request | Returns a pre-built weekly plan for the user's goal, experience, and schedule |
-| `get_arnold_quote` | Motivation, doubt, or encouragement | Returns an Arnold quote matched to the desired tone |
+| `get_exercise_form_cues` | Any exercise form or technique question | Runs RAG with a targeted query and returns cues from the Encyclopedia |
+| `generate_workout_plan` | Training plan requests | Returns a weekly plan based on goal, experience, and schedule |
+| `get_arnold_quote` | Motivation, doubt, or encouragement | Returns an Arnold quote matched to the tone |
 
 ---
 
-## Frameworks & Tools Used
+## Stack
 
-| Layer | Choice |
-|-------|--------|
-| Voice agent framework | LiveKit Agents v1.x (Python) |
+| | |
+|---|---|
+| Voice agent | LiveKit Agents v1.x (Python) |
 | STT | Deepgram Nova-3 |
 | LLM | OpenAI GPT-4.1-mini |
 | TTS | ElevenLabs `eleven_turbo_v2_5` |
 | VAD | Silero |
-| RAG framework | LlamaIndex 0.10.x |
-| Vector store | FAISS (`faiss-cpu`) |
-| Keyword retrieval | `bm25s` |
+| RAG | LlamaIndex 0.10.x + FAISS + `bm25s` |
 | Embeddings | OpenAI `text-embedding-3-small` |
 | Frontend | Next.js 15, LiveKit Components React |
-| Frontend hosting | Vercel |
-| Agent hosting | AWS EC2 `t3.small` (Docker) |
+| Hosting | Vercel (frontend), AWS EC2 (agent) |
 
 ---
 
-## Design Decisions & Assumptions
+## Design decisions
 
 **Hybrid retrieval (FAISS + BM25)**
 Vector search alone wasn't enough. "Preacher curl" and "concentration curl" are semantically close, so a pure embedding search would blur them together. Adding BM25 keeps exact exercise names from getting lost. The combo handles both fuzzy intent ("how do I build my chest") and specific terminology reliably.
