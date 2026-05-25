@@ -103,18 +103,17 @@ cd frontend && npm test
 
 ## Design Decisions & Assumptions
 
-**RAG chunking:** Chunks are ~512 tokens with 50-token overlap. The Encyclopedia is dense and exercise-specific, so smaller chunks produce more precise retrieval hits than page-level summaries. A proper semantic splitter wasn't used — simple size-based splitting was sufficient given how the book is structured (one exercise per section).
+**Hybrid retrieval (FAISS + BM25)**
+Vector search alone wasn't enough. "Preacher curl" and "concentration curl" are semantically close, so a pure embedding search would blur them together. Adding BM25 keeps exact exercise names from getting lost. The combo handles both fuzzy intent ("how do I build my chest") and specific terminology reliably.
 
-**Hybrid retrieval:** Pure vector search misses exact exercise names (e.g. "preacher curl") that may not be semantically close to the query embedding. BM25 catches these. The combination reliably handles both vague ("how do I build my chest") and precise ("how do I do a concentration curl") queries.
+**Fixed-size chunking**
+The Encyclopedia is already organized by exercise — one section per movement. Simple fixed-size chunks worked fine for this structure without needing anything fancier.
 
-**BM25 directly:** `llama-index-retrievers-bm25` has import conflicts with `llama-index-core` 0.10.x. The `bm25s` library is used directly instead, with the same node corpus.
+**A race condition I had to squash**
+LiveKit can start generating a response before RAG finishes injecting context. When it did, the model would see the new context, regenerate — and skip tool calls the second time around every time. Turning off preemptive generation fixed it. Slight latency tradeoff but the correctness was worth it.
 
-**Preemptive generation disabled:** LiveKit Agents can start generating a response before `on_user_turn_completed` finishes. When RAG modifies the context mid-generation, the preemptive output is discarded and the LLM regenerates — and in practice it skipped tool calls on the second pass. Disabling preemptive generation eliminates this race.
+**Sessions and cleanup**
+Each session gets a unique room name so concurrent users are fully isolated. When someone closes the tab, LiveKit notifies the agent and it exits cleanly — no zombie sessions sitting around.
 
-**gpt-4.1-mini:** Used for cost and latency. It is less reliable at function calling than `gpt-4o` or `gpt-4.1`, so the system prompt and tool docstrings are written to be as explicit as possible about when tools must be called.
-
-**Hosting:** The agent runs as a Docker container on a single `t3.small` (2 GB RAM). The FAISS index takes ~800 MB at load time, so `t2.micro` (1 GB) is not sufficient. The `--restart unless-stopped` Docker flag keeps the worker alive across reboots. The agent connects outbound to LiveKit Cloud on startup — no inbound ports needed on the EC2 instance beyond SSH.
-
-**Multi-user:** Each browser session generates a unique room name and participant identity at token-creation time (`arnold-${Date.now()}`). LiveKit Cloud dispatches a fresh agent job per room, so concurrent users each get their own isolated session.
-
-**Tab-close / disconnect:** LiveKit Cloud detects when the user's participant disconnects (tab close, network loss). The agent worker receives a room-empty signal and exits cleanly. Sessions do not linger.
+**What I'd do differently**
+Word-level streaming on the transcript so responses appear as they're spoken rather than all at once. The current per-utterance approach works but feels a bit choppy.
