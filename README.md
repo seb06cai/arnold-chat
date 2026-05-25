@@ -68,39 +68,6 @@
 
 ---
 
-## Setup
-
-### Prerequisites
-- Python 3.11, Node.js 18+
-- API keys: LiveKit Cloud, OpenAI, Deepgram, ElevenLabs
-
-### Run the agent locally
-```bash
-cd agent
-python3.11 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env   # fill in all keys
-python agent.py start
-```
-
-### Run the frontend locally
-```bash
-cd frontend
-npm install
-cp .env.local.example .env.local   # fill in LIVEKIT_* keys
-npm run dev   # http://localhost:3000
-```
-
-With both running, open `http://localhost:3000` and click **BEGIN SESSION**.
-
-### Run tests
-```bash
-cd agent && pytest tests/ -v
-cd frontend && npm test
-```
-
----
-
 ## Design Decisions & Assumptions
 
 **Hybrid retrieval (FAISS + BM25)**
