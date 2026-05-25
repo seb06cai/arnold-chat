@@ -70,17 +70,41 @@
 
 ## Design Decisions & Assumptions
 
-**Hybrid retrieval (FAISS + BM25)**
-Vector search alone wasn't enough. "Preacher curl" and "concentration curl" are semantically close, so a pure embedding search would blur them together. Adding BM25 keeps exact exercise names from getting lost. The combo handles both fuzzy intent ("how do I build my chest") and specific terminology reliably.
+### Why Hybrid Retrieval (FAISS + BM25)
 
-**Fixed-size chunking**
-The Encyclopedia is already organized by exercise — one section per movement. Simple fixed-size chunks worked fine for this structure without needing anything fancier.
+Pure vector search fails on a domain like bodybuilding because exercise names that are semantically similar refer to completely different movements — "preacher curl" and "concentration curl" land close in embedding space but target different heads of the bicep with different form cues. A user asking about one would get passages about both, which is wrong.
 
-**A race condition I had to squash**
-LiveKit can start generating a response before RAG finishes injecting context. When it did, the model would see the new context, regenerate — and skip tool calls the second time around every time. Turning off preemptive generation fixed it. Slight latency tradeoff but the correctness was worth it.
+- **FAISS (semantic, top-4)** handles intent-driven queries well: "how do I build a bigger chest" correctly surfaces bench press, flyes, and dips even though the user never named them.
+- **BM25 (keyword, top-3)** anchors retrieval to exact terminology: when someone says "preacher curl," the keyword match ensures the preacher curl section ranks highest regardless of embedding similarity to related exercises.
+- Results are deduplicated down to **≤5 passages** to stay within a context budget that keeps latency low for a real-time voice agent — the LLM can't spend seconds processing a wall of context when someone is waiting for a spoken reply.
 
-**Sessions and cleanup**
-Each session gets a unique room name so concurrent users are fully isolated. When someone closes the tab, LiveKit notifies the agent and it exits cleanly — no zombie sessions sitting around.
+### Chunking Strategy
 
-**What I'd do differently**
-Word-level streaming on the transcript so responses appear as they're spoken rather than all at once. The current per-utterance approach works but feels a bit choppy.
+The source PDF is Arnold's *Encyclopedia of Modern Bodybuilding* — a 700+ page book organized by body part and exercise, with each section roughly self-contained. Fixed-size chunks (~512 tokens, 50-token overlap) align naturally with this structure because most exercise entries fit within one or two chunks.
+
+- Semantic or recursive chunking would add complexity without a clear payoff here: the text is already well-structured, and the hybrid retrieval layer compensates for any cases where a chunk boundary splits a section mid-thought.
+- The 50-token overlap ensures that sentences at chunk boundaries are never orphaned — if a form cue spans two chunks, at least one chunk captures the full sentence.
+
+### Agent Pipeline Design
+
+The voice pipeline chains four services in sequence: **Deepgram STT → GPT-4.1-mini → ElevenLabs TTS**, with **Silero VAD** for turn detection. Each was chosen for a specific reason:
+
+- **Deepgram Nova-3** for STT because it has strong accuracy on gym/fitness vocabulary out of the box and streams partial transcripts, which feeds into the live transcript UI.
+- **GPT-4.1-mini** as the LLM because it balances quality with latency — fast enough for real-time conversation, capable enough to follow Arnold's persona instructions and make tool calls reliably.
+- **ElevenLabs Turbo v2.5** for TTS because it supports low-latency streaming and has a voice library with a close match for Arnold's cadence and tone.
+- **Silero VAD** because LiveKit's agent framework integrates it natively for turn detection, and it handles the pauses and breathing patterns of natural speech well.
+
+RAG injection happens between STT and LLM: once the user's turn is transcribed, the agent runs hybrid retrieval and injects matched passages as a context message before the LLM generates its response. Preemptive generation is disabled to ensure the LLM always sees the full RAG context before responding.
+
+### Hosting Architecture
+
+- **Frontend on Vercel** — zero-config deployment for the Next.js app, with the `/api/token` route running as a serverless function to mint LiveKit JWTs.
+- **Agent on AWS EC2 (Docker)** — the Python agent worker needs a persistent process to stay registered with LiveKit Cloud as a worker, which rules out serverless. A single EC2 instance running the agent in Docker keeps it simple and always available for room dispatch.
+- **LiveKit Cloud** as the media server — handles all WebRTC complexity (STUN/TURN, codec negotiation, room state) so the agent only needs to implement the conversation logic.
+
+### Limitations & Future Improvements
+
+- **Transcript streaming:** Currently the transcript updates per-utterance rather than word-by-word. Word-level streaming would make the UI feel more responsive and natural during longer Arnold monologues.
+- **Chunk strategy:** A semantic chunking approach that respects section headers in the book could improve retrieval precision for passages that span multiple exercises in a single section (e.g., supersets).
+- **Reranking:** Adding a cross-encoder reranker after the hybrid merge would let the pipeline retrieve more candidates and then pick the truly best passages, improving answer quality on ambiguous queries.
+- **Evaluation:** There is no automated retrieval evaluation pipeline — adding one with a set of ground-truth question/passage pairs would make it possible to quantify the impact of changes to chunking, embedding models, or retrieval parameters.
