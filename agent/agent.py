@@ -131,7 +131,7 @@ class ArnoldAgent(Agent):
         Args:
             goal: Fitness goal — strength, hypertrophy, endurance, or weight_loss.
             experience_level: User experience level — beginner, intermediate, or advanced.
-            days_per_week: Number of training days per week, 1 to 6.
+            days_per_week: Number of training days per week — 3 or 4.
         """
         return arnold_tools.generate_workout_plan(goal, experience_level, days_per_week)
 
