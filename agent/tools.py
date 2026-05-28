@@ -1,123 +1,20 @@
 import random
 
 _PLANS = {
-    ("strength", 3): """\
-Day 1 — Monday: Chest and Triceps
-  Flat Barbell Bench Press: 5 sets x 5 reps
-  Incline Dumbbell Press: 4 sets x 6 reps
-  Tricep Dips: 3 sets to failure
+    ("strength", 3): "Monday is chest and triceps — bench press, incline press, and dips, five sets of five. Wednesday is back and biceps — barbell rows, pull-ups, and curls. Friday is legs and shoulders — squats, Romanian deadlifts, and military press, five by five on ze big lifts.",
 
-Day 2 — Wednesday: Back and Biceps
-  Barbell Rows: 5 sets x 5 reps
-  Pull-Ups: 4 sets x 6 reps
-  Standing Barbell Curls: 3 sets x 8 reps
+    ("strength", 4): "Monday squats, Tuesday bench press, Thursday deadlifts, Friday military press and pull-ups. Every main lift is five sets of five — zat is how you build real strength. Keep ze rest short and ze intensity high.",
 
-Day 3 — Friday: Legs and Shoulders
-  Barbell Back Squat: 5 sets x 5 reps
-  Romanian Deadlift: 4 sets x 6 reps
-  Standing Military Press: 4 sets x 5 reps""",
+    ("hypertrophy", 3): "Monday is chest and biceps — bench press, incline flyes, barbell curls, four sets of ten to twelve. Wednesday is back and triceps — pull-ups, cable rows, skull crushers. Friday is legs and shoulders — squats, leg press, lateral raises, feel every rep.",
 
-    ("strength", 4): """\
-Day 1 — Monday: Squat
-  Barbell Back Squat: 5 sets x 5 reps
-  Romanian Deadlift: 3 sets x 6 reps
+    ("hypertrophy", 4): "Monday chest, Tuesday back, Thursday arms, Saturday legs and shoulders. Four to five sets of ten to fifteen reps on everything, no more. Focus on ze squeeze — if you don't feel ze muscle, you are wasting your time.",
 
-Day 2 — Tuesday: Bench
-  Flat Barbell Bench Press: 5 sets x 5 reps
-  Close-Grip Bench Press: 3 sets x 6 reps
+    ("endurance", 3): "Monday is full body circuit — squats, push-ups, and dumbbell rows, twenty reps each, no rest between. Wednesday is cardio intervals and core work, twenty minutes hard. Friday is lunges, pull-ups, and dips, all to failure.",
 
-Day 3 — Thursday: Deadlift
-  Conventional Deadlift: 5 sets x 5 reps
-  Barbell Rows: 4 sets x 5 reps
-
-Day 4 — Friday: Press
-  Standing Military Press: 5 sets x 5 reps
-  Wide-Grip Pull-Ups: 4 sets x 6 reps""",
-
-    ("hypertrophy", 3): """\
-Day 1 — Monday: Chest and Biceps
-  Flat Barbell Bench Press: 4 sets x 10 reps
-  Incline Dumbbell Flyes: 4 sets x 12 reps
-  Standing Barbell Curls: 3 sets x 12 reps
-
-Day 2 — Wednesday: Back and Triceps
-  Wide-Grip Pull-Ups: 4 sets x 10 reps
-  Seated Cable Rows: 4 sets x 12 reps
-  Skull Crushers: 3 sets x 12 reps
-
-Day 3 — Friday: Legs and Shoulders
-  Barbell Back Squat: 4 sets x 10 reps
-  Leg Press: 3 sets x 12 reps
-  Side Lateral Raises: 4 sets x 15 reps""",
-
-    ("hypertrophy", 4): """\
-Day 1 — Monday: Chest
-  Flat Barbell Bench Press: 5 sets x 10 reps
-  Incline Dumbbell Press: 4 sets x 12 reps
-  Cable Crossovers: 3 sets x 15 reps
-
-Day 2 — Tuesday: Back
-  Wide-Grip Pull-Ups: 4 sets x 10 reps
-  Barbell Rows: 4 sets x 12 reps
-  One-Arm Dumbbell Rows: 3 sets x 12 reps
-
-Day 3 — Thursday: Arms
-  Standing Barbell Curls: 4 sets x 12 reps
-  Hammer Curls: 3 sets x 12 reps
-  Skull Crushers: 4 sets x 12 reps
-  Tricep Pushdowns: 3 sets x 15 reps
-
-Day 4 — Saturday: Legs and Shoulders
-  Barbell Back Squat: 5 sets x 10 reps
-  Leg Press: 4 sets x 12 reps
-  Standing Military Press: 4 sets x 10 reps
-  Side Lateral Raises: 4 sets x 15 reps""",
-
-    ("endurance", 3): """\
-Day 1 — Monday: Full Body Circuit
-  Barbell Squat: 3 sets x 20 reps
-  Push-Ups: 3 sets x 25 reps
-  Dumbbell Rows: 3 sets x 20 reps per arm
-
-Day 2 — Wednesday: Cardio and Core
-  Treadmill Intervals: 20 minutes
-  Plank: 3 holds x 60 seconds
-  Leg Raises: 3 sets x 20 reps
-
-Day 3 — Friday: Full Body
-  Lunges: 3 sets x 20 reps per leg
-  Pull-Ups: 3 sets to failure
-  Parallel Bar Dips: 3 sets to failure""",
-
-    ("weight_loss", 3): """\
-Day 1 — Monday: Upper Body Supersets
-  Bench Press superset with Rows: 4 sets x 12 reps, minimal rest
-  Overhead Press superset with Pull-Ups: 3 sets x 10 reps
-
-Day 2 — Wednesday: Lower Body
-  Barbell Squat: 4 sets x 15 reps
-  Lunges: 3 sets x 15 reps per leg
-  Calf Raises: 4 sets x 20 reps
-
-Day 3 — Friday: Metabolic Full Body
-  Deadlift: 3 sets x 10 reps
-  Push-Ups: 3 sets x 20 reps
-  Dumbbell Thrusters: 3 sets x 15 reps""",
+    ("weight_loss", 3): "Monday is upper body supersets — bench into rows, overhead press into pull-ups, minimal rest, keep ze heart rate up. Wednesday is legs — squats, lunges, calf raises, fifteen reps each. Friday is full body metabolic — deadlifts, push-ups, and dumbbell thrusters, burn everything.",
 }
 
-_DEFAULT_PLAN = """\
-Day 1 — Monday: Chest and Back
-  Flat Barbell Bench Press: 4 sets x 10 reps
-  Wide-Grip Pull-Ups: 4 sets x 10 reps
-
-Day 2 — Wednesday: Legs
-  Barbell Back Squat: 4 sets x 10 reps
-  Romanian Deadlift: 3 sets x 10 reps
-
-Day 3 — Friday: Shoulders and Arms
-  Standing Military Press: 4 sets x 10 reps
-  Standing Barbell Curls: 3 sets x 10 reps
-  Skull Crushers: 3 sets x 10 reps"""
+_DEFAULT_PLAN = "Monday is chest and back — bench press and pull-ups, four sets of ten. Wednesday is legs — squats and Romanian deadlifts. Friday is shoulders and arms — military press, curls, and skull crushers."
 
 _QUOTES: dict[str, list[str]] = {
     "motivational": [
@@ -151,11 +48,7 @@ def generate_workout_plan(goal: str, experience_level: str, days_per_week: int) 
         closest = min((3, 4), key=lambda d: abs(d - days))
         key = (goal.lower().strip(), closest)
     plan = _PLANS.get(key, _DEFAULT_PLAN)
-    return (
-        f"[VOICE AGENT: Read this plan aloud naturally. "
-        f"No markdown, no asterisks, no bullet points. Speak each day as plain sentences.]\n\n"
-        f"Here is your program, designed by ze Austrian Oak himself:\n\n{plan}"
-    )
+    return plan
 
 
 def get_arnold_quote(mood: str) -> str:
